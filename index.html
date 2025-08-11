@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job and Volunteer Tracker</title>
+    <title>Job Application Tracker</title>
     <!-- Use Tailwind CSS for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Import Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, addDoc, setDoc, updateDoc, deleteDoc, query } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, doc, addDoc, setDoc, updateDoc, deleteDoc, query, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         // Global variables for Firebase access
         window.initializeApp = initializeApp;
@@ -27,13 +27,283 @@
         window.updateDoc = updateDoc;
         window.deleteDoc = deleteDoc;
         window.query = query;
+        window.getDocs = getDocs;
     </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* A lighter, more inviting background blue-gray */
+            background-color: #e2e8f0; /* Soft gray-blue background */
         }
         .table-container {
+            overflow-x: auto;
+        }
+        .tracker-table td {
+            white-space: nowrap;
+        }
+        .modal {
+            background-color: rgba(0, 0, 0, 0.6);
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s;
+        }
+        .modal.open {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    <!-- Main content container -->
+    <div class="max-w-7xl mx-auto bg-white p-6 md:p-10 rounded-3xl shadow-2xl border border-gray-100">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl sm:text-5xl font-extrabold text-gray-900 mb-2">
+                <span class="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-sky-500">
+                    Your Application Hub
+                </span>
+            </h1>
+            <p class="text-lg text-gray-600">
+                Track your job and volunteer applications with ease.
+            </p>
+            <div id="user-id-display" class="mt-4 text-sm text-gray-500 hidden">
+                <p>Your User ID:</p>
+                <span id="user-id-text" class="font-mono bg-gray-100 px-2 py-1 rounded-md text-sm break-all">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="flex justify-center mb-8 bg-gray-100 p-1 rounded-xl shadow-inner">
+            <button id="job-tab" class="flex-1 px-4 py-2 text-lg font-bold rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 bg-sky-600 text-white shadow-md">
+                Job Applications
+            </button>
+            <button id="volunteer-tab" class="flex-1 px-4 py-2 text-lg font-bold rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 text-gray-700 hover:bg-gray-200">
+                Volunteer Roles
+            </button>
+        </div>
+
+        <!-- Job Applications Section -->
+        <div id="job-content">
+            <!-- Form to add new job applications -->
+            <div class="bg-gray-50 p-6 md:p-8 rounded-2xl mb-8 shadow-inner border border-gray-200">
+                <h2 id="job-form-title" class="text-2xl font-bold mb-6 text-gray-800">Add New Job Application</h2>
+                <form id="add-job-form" class="space-y-6">
+                    <input type="hidden" id="job-edit-id">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="job-dateApplied" class="block text-sm font-medium text-gray-700">Date Applied</label>
+                            <input type="date" id="job-dateApplied" name="dateApplied" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" required>
+                        </div>
+                        <div>
+                            <label for="job-jobTitle" class="block text-sm font-medium text-gray-700">Job Title</label>
+                            <input type="text" id="job-jobTitle" name="jobTitle" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., Store Assistant" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="job-company" class="block text-sm font-medium text-gray-700">Company</label>
+                        <input type="text" id="job-company" name="company" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., Foodstuffs" required>
+                    </div>
+                    <div>
+                        <label for="job-jobLink" class="block text-sm font-medium text-gray-700">Job Link</label>
+                        <input type="url" id="job-jobLink" name="jobLink" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., https://www.seek.co.nz/job/...">
+                    </div>
+                    <div>
+                        <label for="job-notes" class="block text-sm font-medium text-gray-700">Proof/Notes</label>
+                        <input type="text" id="job-notes" name="notes" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., Picture or notes">
+                    </div>
+                    <div>
+                        <label for="job-status" class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="job-status" name="status" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors">
+                            <option value="Applied">Applied</option>
+                            <option value="Phone Screen">Phone Screen</option>
+                            <option value="Interview">Interview</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Offer">Offer</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-4">
+                        <button type="submit" id="job-submit-btn" class="flex-1 bg-gradient-to-r from-sky-500 to-emerald-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:from-sky-600 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-all duration-300 transform hover:scale-105">
+                            Add Job Application
+                        </button>
+                        <button type="button" id="job-cancel-btn" class="flex-1 hidden bg-gray-400 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 transition-all duration-300 transform hover:scale-105">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Table to display job applications -->
+            <div class="table-container bg-white rounded-2xl shadow-sm border border-gray-200">
+                <h2 class="text-2xl font-bold p-6 text-gray-800">Your Job Applications</h2>
+                <table class="min-w-full divide-y divide-gray-200 tracker-table">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date Applied</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Job Title</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Company</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Job Link</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Proof/Notes</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="job-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Volunteer Roles Section (initially hidden) -->
+        <div id="volunteer-content" class="hidden">
+            <!-- Form to add new volunteer applications -->
+            <div class="bg-gray-50 p-6 md:p-8 rounded-2xl mb-8 shadow-inner border border-gray-200">
+                <h2 id="volunteer-form-title" class="text-2xl font-bold mb-6 text-gray-800">Add New Volunteer Role</h2>
+                <form id="add-volunteer-form" class="space-y-6">
+                    <input type="hidden" id="volunteer-edit-id">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="volunteer-dateApplied" class="block text-sm font-medium text-gray-700">Date Applied</label>
+                            <input type="date" id="volunteer-dateApplied" name="dateApplied" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" required>
+                        </div>
+                        <div>
+                            <label for="volunteer-role" class="block text-sm font-medium text-gray-700">Volunteer Role</label>
+                            <input type="text" id="volunteer-role" name="volunteerRole" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., Event Staff" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="volunteer-organization" class="block text-sm font-medium text-gray-700">Organization</label>
+                        <input type="text" id="volunteer-organization" name="organization" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., Local Community Center" required>
+                    </div>
+                    <div>
+                        <label for="volunteer-link" class="block text-sm font-medium text-gray-700">Website/Contact Link</label>
+                        <input type="url" id="volunteer-link" name="contactLink" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., https://www.communitycenter.org">
+                    </div>
+                    <div>
+                        <label for="volunteer-notes" class="block text-sm font-medium text-gray-700">Notes</label>
+                        <input type="text" id="volunteer-notes" name="notes" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors" placeholder="e.g., Contacted Sarah at the front desk">
+                    </div>
+                    <div>
+                        <label for="volunteer-status" class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="volunteer-status" name="status" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-200 transition-colors">
+                            <option value="Applied">Applied</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Active">Active</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-4">
+                        <button type="submit" id="volunteer-submit-btn" class="flex-1 bg-gradient-to-r from-sky-500 to-emerald-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:from-sky-600 hover:to-emerald-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-all duration-300 transform hover:scale-105">
+                            Add Volunteer Role
+                        </button>
+                        <button type="button" id="volunteer-cancel-btn" class="flex-1 hidden bg-gray-400 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 transition-all duration-300 transform hover:scale-105">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Table to display volunteer roles -->
+            <div class="table-container bg-white rounded-2xl shadow-sm border border-gray-200">
+                <h2 class="text-2xl font-bold p-6 text-gray-800">Your Volunteer Roles</h2>
+                <table class="min-w-full divide-y divide-gray-200 tracker-table">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date Applied</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Volunteer Role</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Organization</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Website/Contact Link</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Notes</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="volunteer-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Data will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal fixed inset-0 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-2xl p-6 max-w-sm mx-auto shadow-xl transform transition-transform scale-100">
+            <h3 class="text-2xl font-bold text-gray-900 mb-2">Confirm Deletion</h3>
+            <p class="mt-2 text-sm text-gray-500">
+                Are you sure you want to permanently delete this entry? This action cannot be undone.
+            </p>
+            <div class="mt-6 flex justify-end gap-3">
+                <button id="cancel-delete-btn" class="px-5 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">
+                    Cancel
+                </button>
+                <button id="confirm-delete-btn" class="px-5 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Wait for the DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check for required global variables
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+            // Initialize Firebase App
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
+
+            let userId = null;
+
+            // --- Authentication Setup ---
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase Auth Error:", error);
+            }
+            
+            // Wait for auth state to be ready
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('user-id-text').textContent = userId;
+                    document.getElementById('user-id-display').classList.remove('hidden');
+
+                    // Start listening to the database after successful authentication
+                    setupFirestoreListeners();
+                } else {
+                    console.error("User not authenticated.");
+                }
+            });
+            
+            // --- UI Elements ---
+            const jobTab = document.getElementById('job-tab');
+            const volunteerTab = document.getElementById('volunteer-tab');
+            const jobContent = document.getElementById('job-content');
+            const volunteerContent = document.getElementById('volunteer-content');
+
+            const addJobForm = document.getElementById('add-job-form');
+            const jobTableBody = document.getElementById('job-table-body');
+            const addVolunteerForm = document.getElementById('add-volunteer-form');
+            const volunteerTableBody = document.getElementById('volunteer-table-body');
+
+            const jobFormTitle = document.getElementById('job-form-title');
+            const jobSubmitBtn = document.getElementById('job-submit-btn');
+            const jobCancelBtn = document.getElementById('job-cancel-btn');
+            const jobEditIdInput = document.getElementById('job-edit-id');
+
+            const volunteerFormTitle = document.getElementById('volunteer-form-title');
+            const volunteerSubmitBtn = document.getElementById('volunteer-submit-btn');
+            const volunteerCancelBtn = document.getElementById('volunteer-cancel-btn');
+            const volunteerEditIdInput = document.getElementById('volunteer-edit-id');
+
+            const deleteModal = document.getElementById('delete-modal');
             overflow-x: auto;
         }
         /* Style for the table to prevent text from wrapping awkwardly on smaller screens */
